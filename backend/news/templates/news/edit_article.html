@@ -10,6 +10,8 @@
 </div>
 {% endif %}
 
+<!-- MAIN EDIT FORM -->
+
 <form method="POST">
 
 {% csrf_token %}
@@ -94,21 +96,17 @@ AI Write Article
 <input type="number"
        name="page_number"
        value="{{ article.page_number }}"
-       class="form-control"
-       required>
+       class="form-control">
 
 </div>
-
 
 <button type="submit" class="btn btn-success">
 Approve Article
 </button>
 
-
 <a href="/send-back/{{ article.id }}/" class="btn btn-warning">
 Send Back to SubEditor
 </a>
-
 
 {% elif request.user.userprofile.role == "subeditor" %}
 
@@ -119,6 +117,39 @@ Send to Editor
 {% endif %}
 
 </form>
+
+
+<!-- SEND TO EDITION FORM (SEPARATE FORM) -->
+
+{% if request.user.userprofile.role == "editor" %}
+
+<hr>
+
+<h5>Send to Another Edition</h5>
+
+<form method="POST" action="/send-to-edition/{{ article.id }}/">
+
+{% csrf_token %}
+
+<select name="edition" class="form-select w-50 mb-2">
+
+{% for ed in editions %}
+
+<option value="{{ ed.id }}">
+{{ ed.name }}
+</option>
+
+{% endfor %}
+
+</select>
+
+<button type="submit" class="btn btn-warning btn-sm">
+Send To Edition
+</button>
+
+</form>
+
+{% endif %}
 
 
 <hr class="mt-5">
@@ -244,21 +275,21 @@ No activity recorded yet
 
 <script>
 
-function getCookie(name) {
+function getCookie(name){
 
 let cookieValue = null;
 
-if (document.cookie && document.cookie !== '') {
+if(document.cookie && document.cookie !== ''){
 
 const cookies = document.cookie.split(';');
 
-for (let i = 0; i < cookies.length; i++) {
+for(let i=0;i<cookies.length;i++){
 
 const cookie = cookies[i].trim();
 
-if (cookie.substring(0, name.length + 1) === (name + '=')) {
+if(cookie.substring(0,name.length+1)===(name+'=')){
 
-cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+cookieValue = decodeURIComponent(cookie.substring(name.length+1));
 break;
 
 }
@@ -272,81 +303,87 @@ return cookieValue;
 }
 
 
-// AI Improve Article
+// AI Improve
 
 function aiImprove(){
 
 let content = document.querySelector("textarea[name='content']").value;
 
-fetch("/ai-improve-article/", {
+fetch("/ai-improve-article/",{
 
-method: "POST",
+method:"POST",
 
-headers: {
-"Content-Type": "application/x-www-form-urlencoded",
-"X-CSRFToken": getCookie("csrftoken")
+headers:{
+"Content-Type":"application/x-www-form-urlencoded",
+"X-CSRFToken":getCookie("csrftoken")
 },
 
-body: "content=" + encodeURIComponent(content)
+body:"content="+encodeURIComponent(content)
 
 })
-.then(res => res.json())
-.then(data => {
 
-document.querySelector("textarea[name='content']").value = data.improved_text;
+.then(res=>res.json())
+.then(data=>{
+
+document.querySelector("textarea[name='content']").value=data.improved_text;
 
 });
 
 }
 
 
-// AI Generate Headline
+// AI Headline
 
 function aiHeadline(){
 
-let content = document.querySelector("textarea[name='content']").value;
+let content=document.querySelector("textarea[name='content']").value;
 
-fetch("/ai-generate-headline/", {
+fetch("/ai-generate-headline/",{
 
-method: "POST",
+method:"POST",
 
-headers: {
-"Content-Type": "application/x-www-form-urlencoded",
-"X-CSRFToken": getCookie("csrftoken")
+headers:{
+"Content-Type":"application/x-www-form-urlencoded",
+"X-CSRFToken":getCookie("csrftoken")
 },
 
-body: "content=" + encodeURIComponent(content)
+body:"content="+encodeURIComponent(content)
 
 })
-.then(res => res.json())
-.then(data => {
 
-document.querySelector("input[name='title']").value = data.headline;
+.then(res=>res.json())
+.then(data=>{
+
+document.querySelector("input[name='title']").value=data.headline;
 
 });
 
 }
 
+
+// AI Write Article
+
 function aiWriteArticle(){
 
-let content = document.querySelector("textarea[name='content']").value;
+let content=document.querySelector("textarea[name='content']").value;
 
-fetch("/ai-generate-article/", {
+fetch("/ai-generate-article/",{
 
-method: "POST",
+method:"POST",
 
-headers: {
-"Content-Type": "application/x-www-form-urlencoded",
-"X-CSRFToken": getCookie("csrftoken")
+headers:{
+"Content-Type":"application/x-www-form-urlencoded",
+"X-CSRFToken":getCookie("csrftoken")
 },
 
-body: "notes=" + encodeURIComponent(content)
+body:"notes="+encodeURIComponent(content)
 
 })
-.then(res => res.json())
-.then(data => {
 
-document.querySelector("textarea[name='content']").value = data.article;
+.then(res=>res.json())
+.then(data=>{
+
+document.querySelector("textarea[name='content']").value=data.article;
 
 });
 

@@ -1,6 +1,7 @@
 import os
 import zipfile
 import xml.etree.ElementTree as ET
+from .utils import get_editorial_date
 
 from django.shortcuts import render, redirect
 from django.http import FileResponse, JsonResponse
@@ -13,7 +14,8 @@ from .models import (
     ArticleVersion,
     Category,
     ArticleActivity,
-    PageLayout
+    PageLayout,
+    Edition
 )
 
 from .ai_services import improve_article, generate_headline, generate_article_from_notes
@@ -27,10 +29,12 @@ from .ai_services import improve_article, generate_headline, generate_article_fr
 def reporter_dashboard(request):
 
     edition = request.user.userprofile.edition
+    today = get_editorial_date()
 
     articles = Article.objects.filter(
         reporter=request.user,
-        edition=edition
+        edition=edition,
+        edition_date=today
     )
 
     return render(request,'news/reporter_dashboard.html',{
@@ -59,7 +63,7 @@ def create_article(request):
 
         if not category:
             return redirect('/create-article/')
-        
+
         role = request.user.userprofile.role
 
         if role == "reporter":
@@ -80,7 +84,8 @@ def create_article(request):
             category=category,
             reporter=request.user,
             edition=edition,
-            status=status
+            status=status,
+            edition_date=get_editorial_date()
         )
 
         ArticleActivity.objects.create(
@@ -115,6 +120,51 @@ def create_article(request):
         "categories":categories
     })
 
+#--------------------------------
+# SEND TO OTHER EDITION
+#--------------------------------
+
+@login_required
+def send_to_edition(request, article_id):
+
+    article = Article.objects.get(id=article_id)
+
+    if request.method == "POST":
+
+        edition_id = request.POST.get("edition")
+
+        edition = Edition.objects.get(id=edition_id)
+
+        new_article = Article.objects.create(
+
+            title=article.title,
+            content=article.content,
+            category=article.category,
+            reporter=article.reporter,
+            edition=edition,
+            status="submitted",
+            received_from_edition=True
+        )
+
+        # copy images
+
+        images = ArticleImage.objects.filter(article=article)
+
+        for img in images:
+
+            ArticleImage.objects.create(
+                article=new_article,
+                image=img.image,
+                caption=img.caption
+            )
+
+        ArticleActivity.objects.create(
+            article=new_article,
+            user=request.user,
+            action=f"Story received from another edition ({article.edition.name})"
+        )
+
+        return redirect("/editor-dashboard/")
 
 # -----------------------------------
 # SUBEDITOR DASHBOARD
@@ -124,9 +174,11 @@ def create_article(request):
 def subeditor_dashboard(request):
 
     edition = request.user.userprofile.edition
+    today = get_editorial_date()
 
     articles = Article.objects.filter(
         edition=edition,
+        edition_date=today,
         status__in=["submitted","subeditor_review","editor_sent_back"]
     )
 
@@ -153,11 +205,13 @@ def subeditor_dashboard(request):
 
     new_articles = Article.objects.filter(
         edition=edition,
+        edition_date=today,
         status="submitted"
     ).count()
 
     sent_back_articles = Article.objects.filter(
         edition=edition,
+        edition_date=today,
         status="editor_sent_back"
     ).count()
 
@@ -169,17 +223,19 @@ def subeditor_dashboard(request):
     })
 
 
+
 # -----------------------------------
 # EDIT ARTICLE
 # -----------------------------------
 
 @login_required
-def edit_article(request,article_id):
+def edit_article(request, article_id):
 
     article = Article.objects.get(id=article_id)
 
     if request.method == "POST":
 
+        # Save previous version
         ArticleVersion.objects.create(
             article=article,
             title=article.title,
@@ -198,10 +254,16 @@ def edit_article(request,article_id):
 
             if not page_number:
 
-                return render(request,"news/edit_article.html",{
-                    "article":article,
-                    "versions":article.versions.all().order_by("-edited_at"),
-                    "error":"Page number required"
+                versions = article.versions.all().order_by("-edited_at")
+                activities = article.activities.all().order_by("-created_at")
+                editions = Edition.objects.exclude(id=article.edition.id)
+
+                return render(request, "news/edit_article.html", {
+                    "article": article,
+                    "versions": versions,
+                    "activities": activities,
+                    "editions": editions,
+                    "error": "Page number required"
                 })
 
             article.page_number = int(page_number)
@@ -232,12 +294,15 @@ def edit_article(request,article_id):
     versions = article.versions.all().order_by("-edited_at")
     activities = article.activities.all().order_by("-created_at")
 
-    return render(request,"news/edit_article.html",{
-        "article":article,
-        "versions":versions,
-        "activities":activities
-    })
+    # Send edition list to template (except current edition)
+    editions = Edition.objects.exclude(id=article.edition.id)
 
+    return render(request, "news/edit_article.html", {
+        "article": article,
+        "versions": versions,
+        "activities": activities,
+        "editions": editions
+    })
 
 # -----------------------------------
 # EDITOR DASHBOARD
@@ -247,9 +312,11 @@ def edit_article(request,article_id):
 def editor_dashboard(request):
 
     edition = request.user.userprofile.edition
+    today = get_editorial_date()
 
     articles = Article.objects.filter(
         edition=edition,
+        edition_date=today,
         status="subeditor_review"
     )
 
@@ -299,9 +366,11 @@ def approve_article(request,article_id):
 def pagination_dashboard(request):
 
     edition = request.user.userprofile.edition
+    today = get_editorial_date()
 
     articles = Article.objects.filter(
         edition=edition,
+        edition_date=today,
         status="editor_approved"
     )
 
@@ -401,32 +470,47 @@ def restore_version(request, version_id):
 # PAGE LAYOUT PLANNER
 # -----------------------------------
 
+from datetime import timedelta
+from django.utils import timezone
+
+
 @login_required
 def page_layout_planner(request):
 
-    edition = request.user.userprofile.edition
+    page_number = int(request.GET.get("page", 1))
 
-    page_number = request.GET.get("page",1)
+    now = timezone.localtime()
 
-    layouts = PageLayout.objects.filter(page_number=page_number)
+    # Production day logic (new edition day after 3AM)
+    if now.hour < 3:
+        production_date = (now - timedelta(days=1)).date()
+    else:
+        production_date = now.date()
+
+    layouts = PageLayout.objects.filter(
+        page_number=page_number,
+        layout_date=production_date
+    )
 
     layout_dict = {}
 
     for layout in layouts:
         layout_dict[layout.slot_number] = layout.article
 
-    used_articles = layouts.values_list("article_id",flat=True)
+    used_articles = layouts.values_list("article_id", flat=True)
 
+    # Only today's approved stories
     articles = Article.objects.filter(
-        edition=edition,
         status="editor_approved",
-        page_number=page_number
+        page_number=page_number,
+        created_at__date=production_date
     ).exclude(id__in=used_articles)
 
-    return render(request,"news/page_layout_planner.html",{
-        "articles":articles,
-        "layouts":layout_dict,
-        "page_number":page_number
+    return render(request, "news/page_layout_planner.html", {
+        "articles": articles,
+        "layouts": layout_dict,
+        "page_number": page_number,
+        "page_range": range(1, 17)   # 16 pages
     })
 
 
@@ -439,25 +523,33 @@ def save_page_layout(request):
 
     if request.method == "POST":
 
+        now = timezone.localtime()
+
+        if now.hour < 3:
+            production_date = (now - timedelta(days=1)).date()
+        else:
+            production_date = now.date()
+
         article_id = request.POST.get("article_id")
-        slot = request.POST.get("slot_number")
-        page = request.POST.get("page_number")
+        slot_number = request.POST.get("slot_number")
+        page_number = request.POST.get("page_number")
 
         article = Article.objects.get(id=article_id)
 
         PageLayout.objects.filter(
-            page_number=page,
-            slot_number=slot
+            page_number=page_number,
+            slot_number=slot_number,
+            layout_date=production_date
         ).delete()
 
         PageLayout.objects.create(
-            page_number=page,
-            slot_number=slot,
-            article=article
+            page_number=page_number,
+            slot_number=slot_number,
+            article=article,
+            layout_date=production_date
         )
 
-        return JsonResponse({"status":"saved"})
-
+        return JsonResponse({"status": "saved"})
 
 # -----------------------------------
 # EXPORT PAGE XML
@@ -659,3 +751,124 @@ def ai_generate_article(request):
         article = generate_article_from_notes(notes)
 
         return JsonResponse({"article":article})
+
+
+# -----------------------------------
+# ARCHIVE SEARCH
+# -----------------------------------
+
+@login_required
+def archive_search(request):
+
+    edition = request.user.userprofile.edition
+
+    articles = Article.objects.filter(edition=edition)
+
+    search = request.GET.get("search")
+    category = request.GET.get("category")
+    reporter = request.GET.get("reporter")
+    date = request.GET.get("date")
+
+    if search:
+        articles = articles.filter(
+            Q(title__icontains=search) |
+            Q(content__icontains=search)
+        )
+
+    if category:
+        articles = articles.filter(category_id=category)
+
+    if reporter:
+        articles = articles.filter(reporter__username__icontains=reporter)
+
+    if date:
+        articles = articles.filter(edition_date=date)
+
+    categories = Category.objects.filter(edition=edition)
+
+    return render(request,"news/archive_search.html",{
+        "articles":articles.order_by("-edition_date"),
+        "categories":categories
+    })
+
+
+#----------------------
+#EDITION INBOX VIEW
+#----------------------
+@login_required
+def edition_inbox(request):
+
+    user_edition = request.user.userprofile.edition
+
+    articles = Article.objects.filter(
+        edition=user_edition,
+        received_from_edition=True,
+        status="submitted"
+    )
+
+    return render(request,"news/edition_inbox.html",{
+        "articles":articles
+    })
+
+
+#-------------------------
+#CHANGE PASSWORD
+#-------------------------
+from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
+
+
+@login_required
+def change_password(request):
+
+    if request.method == "POST":
+
+        form = PasswordChangeForm(request.user, request.POST)
+
+        if form.is_valid():
+
+            user = form.save()
+
+            update_session_auth_hash(request, user)
+
+            return redirect("/")
+
+    else:
+
+        form = PasswordChangeForm(request.user)
+
+    return render(request, "news/change_password.html", {
+        "form": form
+    })
+
+#------------------
+#LOGIN REDIRECT
+#------------------
+from django.shortcuts import redirect
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
+def login_redirect(request):
+
+    profile = request.user.userprofile
+
+    # Force password change
+    if profile.must_change_password:
+        return redirect("/change-password/")
+
+    role = profile.role
+
+    if role == "reporter":
+        return redirect("/reporter-dashboard/")
+
+    elif role == "subeditor":
+        return redirect("/subeditor-dashboard/")
+
+    elif role == "editor":
+        return redirect("/editor-dashboard/")
+
+    elif role == "paginator":
+        return redirect("/pagination-dashboard/")
+
+    return redirect("/")

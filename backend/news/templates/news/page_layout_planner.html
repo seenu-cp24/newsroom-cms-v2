@@ -11,14 +11,16 @@
 
 <select name="page" class="form-select w-25" onchange="this.form.submit()">
 
-{% for i in "1234567890123456" %}
+{% for i in page_range %}
 
-<option value="{{ forloop.counter }}"
-{% if page_number|stringformat:"s" == forloop.counter|stringformat:"s" %}
+<option value="{{ i }}"
+{% if page_number|stringformat:"s" == i|stringformat:"s" %}
 selected
 {% endif %}
 >
-Page {{ forloop.counter }}
+
+Page {{ i }}
+
 </option>
 
 {% endfor %}
@@ -26,7 +28,6 @@ Page {{ forloop.counter }}
 </select>
 
 </form>
-
 
 <div class="row">
 

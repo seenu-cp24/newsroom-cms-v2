@@ -39,6 +39,16 @@ urlpatterns = [
 
     path('ai-generate-article/', views.ai_generate_article, name='ai_generate_article'),
 
+    path('archive-search/', views.archive_search, name='archive_search'),
+
+    path('send-to-edition/<int:article_id>/', views.send_to_edition, name='send_to_edition'),
+
+    path('edition-inbox/',views.edition_inbox,name='edition_inbox'),
+
+    path('change-password/', views.change_password, name='change_password'),
+
+    path('', views.login_redirect, name='login_redirect'),
+
 #    path('ai-generate-from-urls/', views.ai_generate_article_from_urls, name='ai_generate_article_from_urls'),
 
 ]

@@ -122,7 +122,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
@@ -149,6 +149,7 @@ MEDIA_ROOT = '/home/ubuntu/newsroom/media/'
 
 LOGIN_URL = '/login/'
 
+LOGIN_REDIRECT_URL = '/'
 
 # DEFAULT PRIMARY KEY
 

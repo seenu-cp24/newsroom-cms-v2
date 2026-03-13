@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
-
+from django.utils import timezone
 
 # Editions
 class Edition(models.Model):
@@ -64,6 +64,8 @@ class Article(models.Model):
         on_delete=models.CASCADE
     )
 
+    received_from_edition = models.BooleanField(default=False)
+
     status = models.CharField(
         max_length=30,
         choices=STATUS_CHOICES,
@@ -80,6 +82,8 @@ class Article(models.Model):
         null=True,
         blank=True
     )
+
+    edition_date = models.DateField(null=True, blank=True)
 
     created_at = models.DateTimeField(
         auto_now_add=True
@@ -186,9 +190,10 @@ class PageLayout(models.Model):
         on_delete=models.CASCADE
     )
 
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )
+    layout_date = models.DateField(default=timezone.now)
+
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Page {self.page_number} - Slot {self.slot_number}"
+
+        return f"Page {self.page_number} - Slot {self.slot_number} ({self.layout_date})"

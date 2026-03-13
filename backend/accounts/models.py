@@ -26,5 +26,7 @@ class UserProfile(models.Model):
         blank=True
     )
 
+    must_change_password = models.BooleanField(default=True)
+
     def __str__(self):
         return f"{self.user.username} - {self.role}"

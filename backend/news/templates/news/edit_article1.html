@@ -36,7 +36,8 @@
 
 </div>
 
-<br>
+
+<div class="mb-3">
 
 <button type="button" onclick="aiImprove()" class="btn btn-info">
 AI Improve Article
@@ -46,7 +47,13 @@ AI Improve Article
 Generate Headline
 </button>
 
-<br>
+<button type="button" onclick="aiWriteArticle()" class="btn btn-secondary">
+AI Write Article
+</button>
+
+</div>
+
+
 <h4 class="mt-4">Article Images</h4>
 
 <div class="row">
@@ -103,6 +110,32 @@ Send Back to SubEditor
 </a>
 
 
+<hr>
+
+<h5>Send to Another Edition</h5>
+
+<form method="POST" action="/send-to-edition/{{ article.id }}/">
+
+{% csrf_token %}
+
+<select name="edition" class="form-select w-50 mb-2">
+
+{% for ed in editions %}
+
+<option value="{{ ed.id }}">
+{{ ed.name }}
+</option>
+
+{% endfor %}
+
+</select>
+
+<button class="btn btn-warning btn-sm">
+Send To Edition
+</button>
+
+</form>
+
 {% elif request.user.userprofile.role == "subeditor" %}
 
 <button type="submit" class="btn btn-primary">
@@ -115,7 +148,6 @@ Send to Editor
 
 
 <hr class="mt-5">
-
 
 <h3>Article Version History</h3>
 
@@ -177,7 +209,6 @@ No previous versions available
 
 </table>
 
-{% endblock %}
 
 <hr class="mt-5">
 
@@ -235,3 +266,118 @@ No activity recorded yet
 </tbody>
 
 </table>
+
+
+<script>
+
+function getCookie(name) {
+
+let cookieValue = null;
+
+if (document.cookie && document.cookie !== '') {
+
+const cookies = document.cookie.split(';');
+
+for (let i = 0; i < cookies.length; i++) {
+
+const cookie = cookies[i].trim();
+
+if (cookie.substring(0, name.length + 1) === (name + '=')) {
+
+cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+break;
+
+}
+
+}
+
+}
+
+return cookieValue;
+
+}
+
+
+// AI Improve Article
+
+function aiImprove(){
+
+let content = document.querySelector("textarea[name='content']").value;
+
+fetch("/ai-improve-article/", {
+
+method: "POST",
+
+headers: {
+"Content-Type": "application/x-www-form-urlencoded",
+"X-CSRFToken": getCookie("csrftoken")
+},
+
+body: "content=" + encodeURIComponent(content)
+
+})
+.then(res => res.json())
+.then(data => {
+
+document.querySelector("textarea[name='content']").value = data.improved_text;
+
+});
+
+}
+
+
+// AI Generate Headline
+
+function aiHeadline(){
+
+let content = document.querySelector("textarea[name='content']").value;
+
+fetch("/ai-generate-headline/", {
+
+method: "POST",
+
+headers: {
+"Content-Type": "application/x-www-form-urlencoded",
+"X-CSRFToken": getCookie("csrftoken")
+},
+
+body: "content=" + encodeURIComponent(content)
+
+})
+.then(res => res.json())
+.then(data => {
+
+document.querySelector("input[name='title']").value = data.headline;
+
+});
+
+}
+
+function aiWriteArticle(){
+
+let content = document.querySelector("textarea[name='content']").value;
+
+fetch("/ai-generate-article/", {
+
+method: "POST",
+
+headers: {
+"Content-Type": "application/x-www-form-urlencoded",
+"X-CSRFToken": getCookie("csrftoken")
+},
+
+body: "notes=" + encodeURIComponent(content)
+
+})
+.then(res => res.json())
+.then(data => {
+
+document.querySelector("textarea[name='content']").value = data.article;
+
+});
+
+}
+
+</script>
+
+{% endblock %}

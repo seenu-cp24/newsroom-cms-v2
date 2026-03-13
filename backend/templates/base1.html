@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<title>Newsroom Editorial System</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<style>
+
+body{
+background-color:#f4f6f9;
+}
+
+.navbar{
+background-color:#1a2a44;
+padding:10px;
+}
+
+.navbar-brand{
+color:white !important;
+font-weight:bold;
+font-size:20px;
+}
+
+.navbar .btn{
+margin-right:6px;
+}
+
+.navbar .btn-outline-light{
+border-color:white;
+color:white;
+}
+
+.navbar .btn-outline-light:hover{
+background-color:white;
+color:#1a2a44 !important;
+}
+
+.page-container{
+margin-top:25px;
+}
+
+.card{
+box-shadow:0 2px 6px rgba(0,0,0,0.15);
+}
+
+</style>
+
+</head>
+
+<body>
+
+<nav class="navbar navbar-expand-lg">
+
+<div class="d-flex justify-content-between align-items-center">
+
+<h4 class="text-white m-0">
+Newsroom Editorial System
+</h4>
+
+<div class="text-white">
+
+<strong>{{ request.user.username }}</strong>
+(
+{{ request.user.userprofile.role|title }}
+{% if request.user.userprofile.edition %}
+- {{ request.user.userprofile.edition.name }}
+{% endif %}
+)
+
+</div>
+
+</div>
+{% if request.user.userprofile.role == "reporter" %}
+<a href="/reporter-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
+
+{% elif request.user.userprofile.role == "subeditor" %}
+<a href="/subeditor-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
+
+{% elif request.user.userprofile.role == "editor" %}
+<a href="/editor-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
+
+{% elif request.user.userprofile.role == "paginator" %}
+<a href="/pagination-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
+{% endif %}
+<a href="/create-article/" class="btn btn-outline-light btn-sm">
+Create Article
+</a>
+
+{% if request.user.userprofile.role == "editor" or request.user.userprofile.role == "paginator" %}
+
+<a href="/page-layout-planner/" class="btn btn-outline-light btn-sm">
+Page Planner
+</a>
+
+{% endif %}
+
+{% if request.user.userprofile.role == "editor" %}
+
+<a href="/edition-inbox/" class="btn btn-outline-light btn-sm">
+Edition Inbox
+</a>
+
+{% endif %}
+
+<a href="/archive-search/" class="btn btn-outline-light btn-sm">
+Archive
+</a>
+
+<a href="/change-password/" class="btn btn-outline-light btn-sm">
+Change Password
+</a>
+
+<a href="/logout/" class="btn btn-danger btn-sm">
+Logout
+</a>
+
+</div>
+</div>
+
+</nav>
+
+<div class="container page-container">
+
+{% block content %}
+
+{% endblock %}
+
+</div>
+
+</body>
+
+</html>
