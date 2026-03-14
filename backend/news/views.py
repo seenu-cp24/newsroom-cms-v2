@@ -1,8 +1,10 @@
 import os
 import zipfile
 import xml.etree.ElementTree as ET
-from .utils import get_editorial_date
 
+from .utils import get_editorial_date
+from django.utils import timezone
+from datetime import timedelta
 from django.shortcuts import render, redirect
 from django.http import FileResponse, JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -28,7 +30,8 @@ from .ai_services import improve_article, generate_headline, generate_article_fr
 @login_required
 def reporter_dashboard(request):
 
-    edition = request.user.userprofile.edition
+    profile = request.user.userprofile
+    edition = profile.edition
     today = get_editorial_date()
 
     articles = Article.objects.filter(
@@ -37,10 +40,25 @@ def reporter_dashboard(request):
         edition_date=today
     )
 
-    return render(request,'news/reporter_dashboard.html',{
-        'articles':articles
-    })
+    context = {
+        "articles": articles,
 
+        # Role flags for navbar
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/reporter_dashboard.html", context)
 
 # -----------------------------------
 # CREATE ARTICLE
@@ -49,7 +67,8 @@ def reporter_dashboard(request):
 @login_required
 def create_article(request):
 
-    edition = request.user.userprofile.edition
+    profile = request.user.userprofile
+    edition = profile.edition
 
     categories = Category.objects.filter(edition=edition)
 
@@ -62,20 +81,23 @@ def create_article(request):
         category = Category.objects.filter(id=category_id).first()
 
         if not category:
-            return redirect('/create-article/')
+            return redirect("/create-article/")
 
-        role = request.user.userprofile.role
-
-        if role == "reporter":
-            status = "submitted"
-
-        elif role == "subeditor":
+        # Determine role priority
+        if profile.has_role("Editor"):
+            role = "editor"
             status = "subeditor_review"
 
-        elif role == "editor":
-            status = "editor_approved"
+        elif profile.has_role("SubEditor"):
+            role = "subeditor"
+            status = "subeditor_review"
+
+        elif profile.has_role("Reporter"):
+            role = "reporter"
+            status = "submitted"
 
         else:
+            role = "reporter"
             status = "submitted"
 
         article = Article.objects.create(
@@ -97,7 +119,7 @@ def create_article(request):
         images = request.FILES.getlist("images")
         captions = request.POST.getlist("captions")
 
-        for i,image in enumerate(images):
+        for i, image in enumerate(images):
 
             caption = captions[i] if i < len(captions) else ""
 
@@ -107,18 +129,36 @@ def create_article(request):
                 caption=caption
             )
 
-        if role == "reporter":
-            return redirect("/reporter-dashboard/")
-
-        elif role == "subeditor":
-            return redirect("/subeditor-dashboard/")
-
-        elif role == "editor":
+        # Redirect based on highest role
+        if profile.has_role("Editor"):
             return redirect("/editor-dashboard/")
 
-    return render(request,"news/create_article.html",{
-        "categories":categories
-    })
+        elif profile.has_role("SubEditor"):
+            return redirect("/subeditor-dashboard/")
+
+        else:
+            return redirect("/reporter-dashboard/")
+
+    context = {
+        "categories": categories,
+
+        # Navbar role flags
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/create_article.html", context)
+
 
 #--------------------------------
 # SEND TO OTHER EDITION
@@ -126,6 +166,12 @@ def create_article(request):
 
 @login_required
 def send_to_edition(request, article_id):
+
+    profile = request.user.userprofile
+
+    # Only editors can send stories to other editions
+    if not profile.has_role("Editor"):
+        return redirect("/login-redirect/")
 
     article = Article.objects.get(id=article_id)
 
@@ -143,7 +189,8 @@ def send_to_edition(request, article_id):
             reporter=article.reporter,
             edition=edition,
             status="submitted",
-            received_from_edition=True
+            received_from_edition=True,
+            edition_date=get_editorial_date()
         )
 
         # copy images
@@ -166,6 +213,27 @@ def send_to_edition(request, article_id):
 
         return redirect("/editor-dashboard/")
 
+    context = {
+        "article": article,
+
+        # Navbar role flags
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/send_to_edition.html", context)
+
+
 # -----------------------------------
 # SUBEDITOR DASHBOARD
 # -----------------------------------
@@ -173,13 +241,14 @@ def send_to_edition(request, article_id):
 @login_required
 def subeditor_dashboard(request):
 
-    edition = request.user.userprofile.edition
+    profile = request.user.userprofile
+    edition = profile.edition
     today = get_editorial_date()
 
     articles = Article.objects.filter(
         edition=edition,
         edition_date=today,
-        status__in=["submitted","subeditor_review","editor_sent_back"]
+        status__in=["submitted", "subeditor_review", "editor_sent_back"]
     )
 
     search = request.GET.get("search")
@@ -215,13 +284,29 @@ def subeditor_dashboard(request):
         status="editor_sent_back"
     ).count()
 
-    return render(request,"news/subeditor_dashboard.html",{
-        "articles":articles,
-        "categories":categories,
-        "new_articles":new_articles,
-        "sent_back_articles":sent_back_articles
-    })
+    context = {
 
+        "articles": articles,
+        "categories": categories,
+        "new_articles": new_articles,
+        "sent_back_articles": sent_back_articles,
+
+        # Role flags for navbar
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/subeditor_dashboard.html", context)
 
 
 # -----------------------------------
@@ -230,6 +315,8 @@ def subeditor_dashboard(request):
 
 @login_required
 def edit_article(request, article_id):
+
+    profile = request.user.userprofile
 
     article = Article.objects.get(id=article_id)
 
@@ -246,9 +333,11 @@ def edit_article(request, article_id):
         article.title = request.POST["title"]
         article.content = request.POST["content"]
 
-        role = request.user.userprofile.role
+        # ----------------------------
+        # EDITOR ROLE
+        # ----------------------------
 
-        if role == "editor":
+        if profile.has_role("Editor"):
 
             page_number = request.POST.get("page_number")
 
@@ -258,13 +347,27 @@ def edit_article(request, article_id):
                 activities = article.activities.all().order_by("-created_at")
                 editions = Edition.objects.exclude(id=article.edition.id)
 
-                return render(request, "news/edit_article.html", {
+                context = {
                     "article": article,
                     "versions": versions,
                     "activities": activities,
                     "editions": editions,
-                    "error": "Page number required"
-                })
+                    "error": "Page number required",
+
+                    # Navbar flags
+                    "can_create_article": (
+                        profile.has_role("Reporter") or
+                        profile.has_role("SubEditor") or
+                        profile.has_role("Editor")
+                    ),
+                    "can_page_plan": (
+                        profile.has_role("Editor") or
+                        profile.has_role("Paginator")
+                    ),
+                    "is_editor": profile.has_role("Editor"),
+                }
+
+                return render(request, "news/edit_article.html", context)
 
             article.page_number = int(page_number)
             article.status = "editor_approved"
@@ -278,7 +381,11 @@ def edit_article(request, article_id):
 
             return redirect("/editor-dashboard/")
 
-        elif role == "subeditor":
+        # ----------------------------
+        # SUBEDITOR ROLE
+        # ----------------------------
+
+        elif profile.has_role("SubEditor"):
 
             article.status = "subeditor_review"
             article.save()
@@ -294,15 +401,32 @@ def edit_article(request, article_id):
     versions = article.versions.all().order_by("-edited_at")
     activities = article.activities.all().order_by("-created_at")
 
-    # Send edition list to template (except current edition)
     editions = Edition.objects.exclude(id=article.edition.id)
 
-    return render(request, "news/edit_article.html", {
+    context = {
         "article": article,
         "versions": versions,
         "activities": activities,
-        "editions": editions
-    })
+        "editions": editions,
+
+        # Navbar flags
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/edit_article.html", context)
+
+
 
 # -----------------------------------
 # EDITOR DASHBOARD
@@ -311,7 +435,8 @@ def edit_article(request, article_id):
 @login_required
 def editor_dashboard(request):
 
-    edition = request.user.userprofile.edition
+    profile = request.user.userprofile
+    edition = profile.edition
     today = get_editorial_date()
 
     articles = Article.objects.filter(
@@ -322,18 +447,39 @@ def editor_dashboard(request):
 
     pending_articles = articles.count()
 
-    return render(request,"news/editor_dashboard.html",{
-        "articles":articles,
-        "pending_articles":pending_articles
-    })
+    # Role flags for navbar
+    context = {
+        "articles": articles,
+        "pending_articles": pending_articles,
 
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/editor_dashboard.html", context)
 
 # -----------------------------------
 # APPROVE ARTICLE
 # -----------------------------------
 
 @login_required
-def approve_article(request,article_id):
+def approve_article(request, article_id):
+
+    profile = request.user.userprofile
+
+    # Only editors can approve
+    if not profile.has_role("Editor"):
+        return redirect("/login-redirect/")
 
     article = Article.objects.get(id=article_id)
 
@@ -353,9 +499,25 @@ def approve_article(request,article_id):
 
         return redirect("/editor-dashboard/")
 
-    return render(request,"news/approve_article.html",{
-        "article":article
-    })
+    context = {
+        "article": article,
+
+        # Navbar role flags
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/approve_article.html", context)
 
 
 # -----------------------------------
@@ -365,7 +527,8 @@ def approve_article(request,article_id):
 @login_required
 def pagination_dashboard(request):
 
-    edition = request.user.userprofile.edition
+    profile = request.user.userprofile
+    edition = profile.edition
     today = get_editorial_date()
 
     articles = Article.objects.filter(
@@ -376,10 +539,26 @@ def pagination_dashboard(request):
 
     ready_for_pagination = articles.count()
 
-    return render(request,"news/pagination_dashboard.html",{
-        "articles":articles,
-        "ready_for_pagination":ready_for_pagination
-    })
+    context = {
+        "articles": articles,
+        "ready_for_pagination": ready_for_pagination,
+
+        # Role flags for navbar
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/pagination_dashboard.html", context)
 
 
 # -----------------------------------
@@ -387,7 +566,13 @@ def pagination_dashboard(request):
 # -----------------------------------
 
 @login_required
-def publish_article(request,article_id):
+def publish_article(request, article_id):
+
+    profile = request.user.userprofile
+
+    # Only paginator can publish
+    if not profile.has_role("Paginator"):
+        return redirect("/login-redirect/")
 
     article = Article.objects.get(id=article_id)
 
@@ -410,6 +595,12 @@ def publish_article(request,article_id):
 @login_required
 def send_back_to_subeditor(request, article_id):
 
+    profile = request.user.userprofile
+
+    # Only editor allowed
+    if not profile.has_role("Editor"):
+        return redirect("/login-redirect/")
+
     article = Article.objects.get(id=article_id)
 
     if request.method == "POST":
@@ -429,9 +620,11 @@ def send_back_to_subeditor(request, article_id):
 
         return redirect("/editor-dashboard/")
 
+    # GET request → show form
     return render(request, "news/send_back.html", {
         "article": article
     })
+
 
 # -----------------------------------
 # RESTORE ARTICLE VERSION
@@ -439,6 +632,12 @@ def send_back_to_subeditor(request, article_id):
 
 @login_required
 def restore_version(request, version_id):
+
+    profile = request.user.userprofile
+
+    # Only editor can restore versions
+    if not profile.has_role("Editor"):
+        return redirect("/login-redirect/")
 
     version = ArticleVersion.objects.get(id=version_id)
 
@@ -466,17 +665,22 @@ def restore_version(request, version_id):
     return redirect(f"/edit-article/{article.id}/")
 
 
+
+
 # -----------------------------------
 # PAGE LAYOUT PLANNER
 # -----------------------------------
 
-from datetime import timedelta
-from django.utils import timezone
-
-
 @login_required
 def page_layout_planner(request):
 
+    profile = request.user.userprofile
+
+    # Only Editor or Paginator allowed
+    if not (profile.has_role("Editor") or profile.has_role("Paginator")):
+        return redirect("/login-redirect/")
+
+    edition = profile.edition
     page_number = int(request.GET.get("page", 1))
 
     now = timezone.localtime()
@@ -499,19 +703,36 @@ def page_layout_planner(request):
 
     used_articles = layouts.values_list("article_id", flat=True)
 
-    # Only today's approved stories
+    # Only today's approved stories of this edition
     articles = Article.objects.filter(
+        edition=edition,
+        edition_date=production_date,
         status="editor_approved",
-        page_number=page_number,
-        created_at__date=production_date
+        page_number=page_number
     ).exclude(id__in=used_articles)
 
-    return render(request, "news/page_layout_planner.html", {
+    context = {
         "articles": articles,
         "layouts": layout_dict,
         "page_number": page_number,
-        "page_range": range(1, 17)   # 16 pages
-    })
+        "page_range": range(1, 17),
+
+        # Navbar flags
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/page_layout_planner.html", context)
 
 
 # -----------------------------------
@@ -520,6 +741,11 @@ def page_layout_planner(request):
 
 @login_required
 def save_page_layout(request):
+
+    profile = request.user.userprofile
+
+    if not (profile.has_role("Editor") or profile.has_role("Paginator")):
+        return JsonResponse({"status": "error", "message": "Permission denied"})
 
     if request.method == "POST":
 
@@ -551,12 +777,16 @@ def save_page_layout(request):
 
         return JsonResponse({"status": "saved"})
 
-# -----------------------------------
+#--------------------
 # EXPORT PAGE XML
-# -----------------------------------
-
+# -------------------
 @login_required
-def export_page_package(request,page_number):
+def export_page_package(request, page_number):
+
+    profile = request.user.userprofile
+
+    if not profile.has_role("Editor"):
+        return redirect("/login-redirect/")
 
     layouts = PageLayout.objects.filter(page_number=page_number)
 
@@ -575,26 +805,25 @@ def export_page_package(request,page_number):
 
         root = ET.Element("article")
 
-        ET.SubElement(root,"title").text = article.title
-        ET.SubElement(root,"category").text = article.category.name
-        ET.SubElement(root,"page").text = str(article.page_number)
-        ET.SubElement(root,"reporter").text = article.reporter.username
-        ET.SubElement(root,"content").text = article.content
+        ET.SubElement(root, "title").text = article.title
+        ET.SubElement(root, "category").text = article.category.name
+        ET.SubElement(root, "page").text = str(article.page_number)
+        ET.SubElement(root, "reporter").text = article.reporter.username
+        ET.SubElement(root, "content").text = article.content
 
         tree = ET.ElementTree(root)
         tree.write(xml_file)
 
-    with zipfile.ZipFile(zip_path,'w') as zipf:
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
 
         for file in os.listdir(export_dir):
 
             zipf.write(
-                os.path.join(export_dir,file),
+                os.path.join(export_dir, file),
                 file
             )
 
-    return FileResponse(open(zip_path,"rb"),as_attachment=True)
-
+    return FileResponse(open(zip_path, "rb"), as_attachment=True)
 
 # -----------------------------------
 # EXPORT SINGLE ARTICLE XML
@@ -602,6 +831,11 @@ def export_page_package(request,page_number):
 
 @login_required
 def export_article_xml(request, article_id):
+
+    profile = request.user.userprofile
+
+    if not (profile.has_role("Editor") or profile.has_role("Paginator")):
+        return redirect("/login-redirect/")
 
     article = Article.objects.get(id=article_id)
 
@@ -667,7 +901,12 @@ def export_article_xml(request, article_id):
 # -----------------------------------
 
 @login_required
-def export_quark_tagged_page(request,page_number):
+def export_quark_tagged_page(request, page_number):
+
+    profile = request.user.userprofile
+
+    if not profile.has_role("Paginator"):
+        return redirect("/login-redirect/")
 
     layouts = PageLayout.objects.filter(page_number=page_number)
 
@@ -754,51 +993,94 @@ def ai_generate_article(request):
 
 
 # -----------------------------------
-# ARCHIVE SEARCH
+# POWERFUL NEWSROOM ARCHIVE SEARCH
 # -----------------------------------
 
 @login_required
 def archive_search(request):
 
-    edition = request.user.userprofile.edition
+    profile = request.user.userprofile
+    edition = profile.edition
 
     articles = Article.objects.filter(edition=edition)
 
+    # Filters from search form
     search = request.GET.get("search")
     category = request.GET.get("category")
     reporter = request.GET.get("reporter")
     date = request.GET.get("date")
+    status = request.GET.get("status")
 
+    # Keyword search
     if search:
         articles = articles.filter(
             Q(title__icontains=search) |
             Q(content__icontains=search)
         )
 
+    # Category filter
     if category:
         articles = articles.filter(category_id=category)
 
+    # Reporter filter
     if reporter:
         articles = articles.filter(reporter__username__icontains=reporter)
 
+    # Date filter
     if date:
         articles = articles.filter(edition_date=date)
 
+    # Status filter
+    if status:
+        articles = articles.filter(status=status)
+
+    # Order latest first
+    articles = articles.order_by("-edition_date", "-created_at")
+
     categories = Category.objects.filter(edition=edition)
 
-    return render(request,"news/archive_search.html",{
-        "articles":articles.order_by("-edition_date"),
-        "categories":categories
-    })
+    context = {
 
+        "articles": articles,
+        "categories": categories,
+
+        "search": search,
+        "reporter": reporter,
+        "date": date,
+        "status": status,
+        "selected_category": category,
+
+        # Navbar flags
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/archive_search.html", context)
 
 #----------------------
-#EDITION INBOX VIEW
+# EDITION INBOX VIEW
 #----------------------
+
 @login_required
 def edition_inbox(request):
 
-    user_edition = request.user.userprofile.edition
+    profile = request.user.userprofile
+
+    # Only editors can access inbox
+    if not profile.has_role("Editor"):
+        return redirect("/login-redirect/")
+
+    user_edition = profile.edition
 
     articles = Article.objects.filter(
         edition=user_edition,
@@ -806,20 +1088,38 @@ def edition_inbox(request):
         status="submitted"
     )
 
-    return render(request,"news/edition_inbox.html",{
-        "articles":articles
-    })
+    context = {
+        "articles": articles,
+
+        # Navbar flags
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request,"news/edition_inbox.html", context)
+
 
 
 #-------------------------
-#CHANGE PASSWORD
+# CHANGE PASSWORD
 #-------------------------
+
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 
 
 @login_required
 def change_password(request):
+
+    profile = request.user.userprofile
 
     if request.method == "POST":
 
@@ -831,15 +1131,33 @@ def change_password(request):
 
             update_session_auth_hash(request, user)
 
-            return redirect("/")
+            # Remove force password change flag
+            profile.must_change_password = False
+            profile.save()
+
+            return redirect("/login-redirect/")
 
     else:
 
         form = PasswordChangeForm(request.user)
 
-    return render(request, "news/change_password.html", {
-        "form": form
-    })
+    context = {
+        "form": form,
+
+        "can_create_article": (
+            profile.has_role("Reporter") or
+            profile.has_role("SubEditor") or
+            profile.has_role("Editor")
+        ),
+        "can_page_plan": (
+            profile.has_role("Editor") or
+            profile.has_role("Paginator")
+        ),
+        "is_editor": profile.has_role("Editor"),
+    }
+
+    return render(request, "news/change_password.html", context)
+
 
 #------------------
 # LOGIN REDIRECT
@@ -855,46 +1173,42 @@ def login_redirect(request):
 
     user = request.user
 
-    # Superuser goes to User Control Panel
+    # Superuser → User Control Panel
     if user.is_superuser:
         return redirect("/user-control/")
 
-    # Ensure userprofile exists
     try:
         profile = user.userprofile
     except UserProfile.DoesNotExist:
-        profile = UserProfile.objects.create(
-            user=user,
-            role="reporter"
-        )
+        profile = UserProfile.objects.create(user=user)
 
     # Force password change
     if profile.must_change_password:
         return redirect("/change-password/")
 
-    role = profile.role
+    roles = profile.roles.all()
 
-    if role == "reporter":
-        return redirect("/reporter-dashboard/")
-
-    elif role == "subeditor":
-        return redirect("/subeditor-dashboard/")
-
-    elif role == "editor":
+    # Priority order
+    if roles.filter(name="Editor").exists():
         return redirect("/editor-dashboard/")
 
-    elif role == "paginator":
+    elif roles.filter(name="SubEditor").exists():
+        return redirect("/subeditor-dashboard/")
+
+    elif roles.filter(name="Paginator").exists():
         return redirect("/pagination-dashboard/")
 
-    # fallback
+    elif roles.filter(name="Reporter").exists():
+        return redirect("/reporter-dashboard/")
+
     return redirect("/")
 
 #--------------------
-#ADMIN VIEW
+# ADMIN VIEW
 #-------------------
+
 from django.contrib.auth.models import User
 from accounts.models import UserProfile
-from .models import Edition
 
 
 @login_required
@@ -909,12 +1223,10 @@ def user_control_panel(request):
 
     for user in users:
 
-        profile = None
-
         try:
             profile = user.userprofile
-        except:
-            pass
+        except UserProfile.DoesNotExist:
+            profile = None
 
         user_data.append({
             "user": user,

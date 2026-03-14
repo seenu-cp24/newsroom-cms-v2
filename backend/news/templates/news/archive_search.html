@@ -2,50 +2,95 @@
 
 {% block content %}
 
-<h2>Archive Search</h2>
+<h2 class="mb-4">News Archive</h2>
 
-<form method="GET" class="row g-3 mb-4">
+<form method="GET" class="card card-body mb-4">
+
+<div class="row g-3">
 
 <div class="col-md-3">
-<input type="text" name="search" placeholder="Keyword" class="form-control">
+<label class="form-label">Keyword</label>
+<input type="text" name="search" value="{{ search }}" class="form-control">
 </div>
 
 <div class="col-md-2">
+<label class="form-label">Category</label>
 <select name="category" class="form-select">
-<option value="">All Categories</option>
+
+<option value="">All</option>
 
 {% for cat in categories %}
-<option value="{{ cat.id }}">{{ cat.name }}</option>
+<option value="{{ cat.id }}"
+{% if selected_category == cat.id|stringformat:"s" %}
+selected
+{% endif %}
+>
+{{ cat.name }}
+</option>
 {% endfor %}
 
 </select>
 </div>
 
 <div class="col-md-2">
-<input type="text" name="reporter" placeholder="Reporter" class="form-control">
+<label class="form-label">Reporter</label>
+<input type="text" name="reporter" value="{{ reporter }}" class="form-control">
 </div>
 
 <div class="col-md-2">
-<input type="date" name="date" class="form-control">
+<label class="form-label">Edition Date</label>
+<input type="date" name="date" value="{{ date }}" class="form-control">
 </div>
 
 <div class="col-md-2">
-<button type="submit" class="btn btn-primary">Search</button>
+<label class="form-label">Status</label>
+
+<select name="status" class="form-select">
+
+<option value="">All</option>
+
+<option value="draft">Draft</option>
+<option value="submitted">Submitted</option>
+<option value="subeditor_review">SubEditor Review</option>
+<option value="editor_sent_back">Editor Sent Back</option>
+<option value="editor_approved">Editor Approved</option>
+<option value="pagination">Pagination</option>
+<option value="published">Published</option>
+
+</select>
+
+</div>
+
+<div class="col-md-1 d-flex align-items-end">
+
+<button class="btn btn-primary w-100">
+Search
+</button>
+
+</div>
+
 </div>
 
 </form>
 
+<hr>
 
-<table class="table table-bordered">
+<h4 class="mb-3">Archive Results</h4>
+
+<table class="table table-bordered table-striped">
 
 <thead class="table-dark">
 
 <tr>
+
 <th>Date</th>
 <th>Title</th>
 <th>Category</th>
 <th>Reporter</th>
 <th>Status</th>
+<th>Page</th>
+<th>Action</th>
+
 </tr>
 
 </thead>
@@ -55,17 +100,47 @@
 {% for article in articles %}
 
 <tr>
+
 <td>{{ article.edition_date }}</td>
+
 <td>{{ article.title }}</td>
+
 <td>{{ article.category.name }}</td>
+
 <td>{{ article.reporter.username }}</td>
-<td>{{ article.status }}</td>
+
+<td>{{ article.get_status_display }}</td>
+
+<td>
+{% if article.page_number %}
+{{ article.page_number }}
+{% else %}
+-
+{% endif %}
+</td>
+
+<td>
+
+<a href="/edit-article/{{ article.id }}/"
+class="btn btn-sm btn-outline-primary">
+View
+</a>
+
+<a href="/export-article/{{ article.id }}/"
+class="btn btn-sm btn-outline-success">
+XML
+</a>
+
+</td>
+
 </tr>
 
 {% empty %}
 
 <tr>
-<td colspan="5" class="text-center">No results found</td>
+<td colspan="7" class="text-center">
+No articles found
+</td>
 </tr>
 
 {% endfor %}

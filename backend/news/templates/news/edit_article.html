@@ -13,31 +13,23 @@
 <!-- MAIN EDIT FORM -->
 
 <form method="POST">
-
 {% csrf_token %}
 
 <div class="mb-3">
-
 <label class="form-label">Title</label>
-
 <input type="text"
        name="title"
        value="{{ article.title }}"
        class="form-control">
-
 </div>
 
-
 <div class="mb-3">
-
 <label class="form-label">Content</label>
 
 <textarea name="content"
           rows="10"
           class="form-control">{{ article.content }}</textarea>
-
 </div>
-
 
 <div class="mb-3">
 
@@ -69,9 +61,7 @@ AI Write Article
 <img src="{{ image.image.url }}" class="card-img-top">
 
 <div class="card-body">
-
 <p class="card-text">{{ image.caption }}</p>
-
 </div>
 
 </div>
@@ -87,9 +77,35 @@ AI Write Article
 </div>
 
 
-{% if request.user.userprofile.role == "editor" %}
+<!-- ROLE BASED ACTION BUTTONS -->
 
-<div class="mb-3">
+{% with roles=request.user.userprofile.roles.all %}
+
+<!-- SUBEDITOR ACTION -->
+
+{% if article.status == "submitted" or article.status == "editor_sent_back" %}
+
+{% for r in roles %}
+{% if r.name == "SubEditor" %}
+
+<button type="submit" class="btn btn-primary">
+Send to Editor
+</button>
+
+{% endif %}
+{% endfor %}
+
+{% endif %}
+
+
+<!-- EDITOR ACTIONS -->
+
+{% if article.status == "subeditor_review" %}
+
+{% for r in roles %}
+{% if r.name == "Editor" %}
+
+<div class="mb-3 mt-3">
 
 <label class="form-label">Assign Page Number</label>
 
@@ -104,24 +120,28 @@ AI Write Article
 Approve Article
 </button>
 
-<a href="/send-back/{{ article.id }}/" class="btn btn-warning">
+<a href="/send-back/{{ article.id }}/"
+   class="btn btn-warning">
 Send Back to SubEditor
 </a>
 
-{% elif request.user.userprofile.role == "subeditor" %}
-
-<button type="submit" class="btn btn-primary">
-Send to Editor
-</button>
+{% endif %}
+{% endfor %}
 
 {% endif %}
+
+{% endwith %}
 
 </form>
 
 
-<!-- SEND TO EDITION FORM (SEPARATE FORM) -->
 
-{% if request.user.userprofile.role == "editor" %}
+<!-- SEND TO OTHER EDITION -->
+
+{% with roles=request.user.userprofile.roles.all %}
+
+{% for r in roles %}
+{% if r.name == "Editor" %}
 
 <hr>
 
@@ -150,6 +170,10 @@ Send To Edition
 </form>
 
 {% endif %}
+{% endfor %}
+
+{% endwith %}
+
 
 
 <hr class="mt-5">
@@ -159,14 +183,12 @@ Send To Edition
 <table class="table table-bordered table-striped">
 
 <thead class="table-dark">
-
 <tr>
 <th>Edited By</th>
 <th>Edited At</th>
 <th>Title</th>
 <th>Action</th>
 </tr>
-
 </thead>
 
 <tbody>
@@ -183,18 +205,20 @@ Send To Edition
 
 <td>
 
-{% if request.user.userprofile.role == "editor" %}
+{% with roles=request.user.userprofile.roles.all %}
+
+{% for r in roles %}
+{% if r.name == "Editor" %}
 
 <a href="/restore-version/{{ version.id }}/"
    class="btn btn-sm btn-secondary">
 Restore
 </a>
 
-{% else %}
-
--
-
 {% endif %}
+{% endfor %}
+
+{% endwith %}
 
 </td>
 
@@ -215,6 +239,7 @@ No previous versions available
 </table>
 
 
+
 <hr class="mt-5">
 
 <h3>Article Activity Timeline</h3>
@@ -222,14 +247,12 @@ No previous versions available
 <table class="table table-bordered table-striped">
 
 <thead class="table-dark">
-
 <tr>
 <th>User</th>
 <th>Action</th>
 <th>Comment</th>
 <th>Date</th>
 </tr>
-
 </thead>
 
 <tbody>
@@ -277,19 +300,19 @@ No activity recorded yet
 
 function getCookie(name){
 
-let cookieValue = null;
+let cookieValue=null;
 
-if(document.cookie && document.cookie !== ''){
+if(document.cookie && document.cookie!==''){
 
-const cookies = document.cookie.split(';');
+const cookies=document.cookie.split(';');
 
 for(let i=0;i<cookies.length;i++){
 
-const cookie = cookies[i].trim();
+const cookie=cookies[i].trim();
 
 if(cookie.substring(0,name.length+1)===(name+'=')){
 
-cookieValue = decodeURIComponent(cookie.substring(name.length+1));
+cookieValue=decodeURIComponent(cookie.substring(name.length+1));
 break;
 
 }
@@ -307,7 +330,7 @@ return cookieValue;
 
 function aiImprove(){
 
-let content = document.querySelector("textarea[name='content']").value;
+let content=document.querySelector("textarea[name='content']").value;
 
 fetch("/ai-improve-article/",{
 

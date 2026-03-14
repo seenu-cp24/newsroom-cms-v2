@@ -41,12 +41,20 @@ margin-right:8px;
 <div>
 
 <strong>{{ request.user.username }}</strong>
+
+{% if request.user.userprofile %}
+
 (
-{{ request.user.userprofile.role|title }}
+{% for role in request.user.userprofile.roles.all %}
+{{ role.name }}{% if not forloop.last %} | {% endif %}
+{% endfor %}
+
 {% if request.user.userprofile.edition %}
-- {{ request.user.userprofile.edition.name }}
+ - {{ request.user.userprofile.edition.name }}
 {% endif %}
 )
+
+{% endif %}
 
 </div>
 
@@ -63,35 +71,50 @@ margin-right:8px;
 
 <div class="nav-buttons">
 
-{% if request.user.userprofile.role == "reporter" %}
-<a href="/reporter-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
+<!-- DASHBOARDS -->
 
-{% elif request.user.userprofile.role == "subeditor" %}
-<a href="/subeditor-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
+{% for role in request.user.userprofile.roles.all %}
 
-{% elif request.user.userprofile.role == "editor" %}
-<a href="/editor-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
-
-{% elif request.user.userprofile.role == "paginator" %}
-<a href="/pagination-dashboard/" class="btn btn-outline-light btn-sm">Dashboard</a>
+{% if role.name == "Reporter" %}
+<a href="/reporter-dashboard/" class="btn btn-outline-light btn-sm">
+Reporter Dashboard
+</a>
 {% endif %}
 
-<a href="/create-article/" class="btn btn-outline-light btn-sm">Create Article</a>
+{% if role.name == "SubEditor" %}
+<a href="/subeditor-dashboard/" class="btn btn-outline-light btn-sm">
+SubEditor Dashboard
+</a>
+{% endif %}
 
-{% if request.user.userprofile.role == "editor" or request.user.userprofile.role == "paginator" %}
+{% if role.name == "Editor" %}
+<a href="/editor-dashboard/" class="btn btn-outline-light btn-sm">
+Editor Dashboard
+</a>
+{% endif %}
+
+{% if role.name == "Paginator" %}
+<a href="/pagination-dashboard/" class="btn btn-outline-light btn-sm">
+Pagination Dashboard
+</a>
+{% endif %}
+
+{% endfor %}
+
+{% if can_create_article %}
+<a href="/create-article/" class="btn btn-outline-light btn-sm">Create Article</a>
+{% endif %}
+
+{% if can_page_plan %}
 <a href="/page-layout-planner/" class="btn btn-outline-light btn-sm">Page Planner</a>
 {% endif %}
 
-{% if request.user.userprofile.role == "editor" %}
+{% if is_editor %}
 <a href="/edition-inbox/" class="btn btn-outline-light btn-sm">Edition Inbox</a>
 {% endif %}
 
 {% if request.user.is_superuser %}
-
-<a href="/user-control/" class="btn btn-outline-light btn-sm">
-User Control
-</a>
-
+<a href="/user-control/" class="btn btn-outline-light btn-sm">User Control</a>
 {% endif %}
 
 <a href="/archive-search/" class="btn btn-outline-light btn-sm">Archive</a>
@@ -99,8 +122,6 @@ User Control
 <a href="/change-password/" class="btn btn-outline-light btn-sm">Change Password</a>
 
 </div>
-
-
 <div>
 
 <a href="/logout/" class="btn btn-danger btn-sm">Logout</a>

@@ -4,7 +4,6 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from accounts.models import UserProfile
 
-
 def user_login(request):
 
     if request.method == "POST":
@@ -18,45 +17,34 @@ def user_login(request):
 
             login(request, user)
 
-            # If superuser → go to User Control Panel
-            if user.is_superuser:
-                return redirect("/user-control/")
+            # Get profile
+            profile = user.userprofile
 
-            # Ensure UserProfile exists
-            profile, created = UserProfile.objects.get_or_create(
-                user=user,
-                defaults={
-                    "role": "reporter"
-                }
-            )
-
-            # Force password change
+            # Force password change first login
             if profile.must_change_password:
                 return redirect("/change-password/")
 
-            role = profile.role
-
-            if role == "reporter":
-                return redirect("/reporter-dashboard/")
-
-            elif role == "subeditor":
-                return redirect("/subeditor-dashboard/")
-
-            elif role == "editor":
+            # Multi-role redirect priority
+            if profile.has_role("Editor"):
                 return redirect("/editor-dashboard/")
 
-            elif role == "paginator":
+            if profile.has_role("SubEditor"):
+                return redirect("/subeditor-dashboard/")
+
+            if profile.has_role("Reporter"):
+                return redirect("/reporter-dashboard/")
+
+            if profile.has_role("Paginator"):
                 return redirect("/pagination-dashboard/")
 
             return redirect("/")
 
         else:
-
-            return render(request, "accounts/login.html", {
-                "error": "Invalid username or password"
-            })
+            messages.error(request, "Invalid username or password")
 
     return render(request, "accounts/login.html")
+
+
 
 def user_logout(request):
 

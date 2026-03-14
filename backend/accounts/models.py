@@ -2,21 +2,20 @@ from django.db import models
 from django.contrib.auth.models import User
 from news.models import Edition
 
+class Role(models.Model):
+
+    name = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return self.name
 
 class UserProfile(models.Model):
 
-    ROLE_CHOICES = [
-        ('reporter', 'Reporter'),
-        ('subeditor', 'SubEditor'),
-        ('editor', 'Editor'),
-        ('paginator', 'Paginator'),
-    ]
-
     user = models.OneToOneField(User, on_delete=models.CASCADE)
 
-    role = models.CharField(
-        max_length=20,
-        choices=ROLE_CHOICES
+    roles = models.ManyToManyField(
+        Role,
+        blank=True
     )
 
     edition = models.ForeignKey(
@@ -28,8 +27,33 @@ class UserProfile(models.Model):
 
     must_change_password = models.BooleanField(default=True)
 
+    # -------------------------
+    # ROLE HELPER FUNCTIONS
+    # -------------------------
+
+    def has_role(self, role_name):
+        """
+        Check if the user has a specific role
+        Example: profile.has_role("editor")
+        """
+        return self.roles.filter(name__iexact=role_name).exists()
+
+    def get_roles(self):
+        """
+        Return all role names as list
+        Example: ['Reporter','SubEditor']
+        """
+        return [r.name for r in self.roles.all()]
+
+    # -------------------------
+    # DISPLAY IN ADMIN
+    # -------------------------
+
     def __str__(self):
-        return f"{self.user.username} - {self.role}"
+
+        roles = ", ".join(self.get_roles())
+
+        return f"{self.user.username} ({roles})"
 
 
 from django.db.models.signals import post_save

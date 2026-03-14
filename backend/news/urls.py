@@ -59,6 +59,8 @@ urlpatterns = [
 
     path('reset-password/<int:user_id>/', views.reset_password, name='reset_password'),
 
+    path('login-redirect/', views.login_redirect, name='login_redirect'),
+
 #    path('ai-generate-from-urls/', views.ai_generate_article_from_urls, name='ai_generate_article_from_urls'),
 
 ]
