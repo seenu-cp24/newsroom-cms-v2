@@ -13,16 +13,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY
 SECRET_KEY = 'django-insecure-newsroom-development-key'
 
-DEBUG = False
+DEBUG = True
 
-ALLOWED_HOSTS = [
-    'andhraprabha.net',
-    'www.andhraprabha.net',
-    '13.234.146.97',
-    'localhost',
-    '127.0.0.1',
-    '0.0.0.0'
-]
+ALLOWED_HOSTS = ['andhraprabha.net', 'www.andhraprabha.net', '13.234.146.97', 'localhost', '127.0.0.1']
+
 
 # APPLICATIONS
 
@@ -96,12 +90,8 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'newsroom',
-        'USER': 'newsroom_user',
-        'PASSWORD': 'Newsroom@123',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -161,27 +151,3 @@ LOGIN_REDIRECT_URL = '/'
 # DEFAULT PRIMARY KEY
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-import os
-
-STATIC_URL = '/static/'
-
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# SECURITY SETTINGS
-
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = 'DENY'
-
-CSRF_COOKIE_SECURE = False   # will change after HTTPS
-SESSION_COOKIE_SECURE = False
-
-# HTTPS SETTINGS
-
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-SECURE_SSL_REDIRECT = True
-
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
