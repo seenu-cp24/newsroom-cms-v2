@@ -20,8 +20,12 @@ from .models import (
     Edition
 )
 
-from .ai_services import improve_article, generate_headline, generate_article_from_notes
-
+from .ai_services import (
+    improve_article,
+    generate_headline,
+    generate_article_from_notes,
+    create_article_from_topic
+)
 
 # -----------------------------------
 # REPORTER DASHBOARD
@@ -317,8 +321,17 @@ def subeditor_dashboard(request):
 def edit_article(request, article_id):
 
     profile = request.user.userprofile
-
     article = Article.objects.get(id=article_id)
+
+    # 🔥 Prepare editions (user edition first)
+    user_edition = profile.edition
+
+    if user_edition:
+        editions = [user_edition] + list(
+            Edition.objects.exclude(id=user_edition.id)
+        )
+    else:
+        editions = Edition.objects.all()
 
     if request.method == "POST":
 
@@ -336,22 +349,22 @@ def edit_article(request, article_id):
         # ----------------------------
         # EDITOR ROLE
         # ----------------------------
-
         if profile.has_role("Editor"):
 
             page_number = request.POST.get("page_number")
+            edition_id = request.POST.get("edition")
 
             if not page_number:
 
                 versions = article.versions.all().order_by("-edited_at")
                 activities = article.activities.all().order_by("-created_at")
-                editions = Edition.objects.exclude(id=article.edition.id)
 
                 context = {
                     "article": article,
                     "versions": versions,
                     "activities": activities,
                     "editions": editions,
+                    "user_edition": user_edition,
                     "error": "Page number required",
 
                     # Navbar flags
@@ -369,7 +382,13 @@ def edit_article(request, article_id):
 
                 return render(request, "news/edit_article.html", context)
 
+            # ✅ Save page number
             article.page_number = int(page_number)
+
+            # 🔥 IMPORTANT FIX: Save selected edition
+            if edition_id:
+                article.edition = Edition.objects.get(id=edition_id)
+
             article.status = "editor_approved"
             article.save()
 
@@ -384,7 +403,6 @@ def edit_article(request, article_id):
         # ----------------------------
         # SUBEDITOR ROLE
         # ----------------------------
-
         elif profile.has_role("SubEditor"):
 
             article.status = "subeditor_review"
@@ -398,16 +416,19 @@ def edit_article(request, article_id):
 
             return redirect("/subeditor-dashboard/")
 
+    # ----------------------------
+    # GET REQUEST
+    # ----------------------------
+
     versions = article.versions.all().order_by("-edited_at")
     activities = article.activities.all().order_by("-created_at")
-
-    editions = Edition.objects.exclude(id=article.edition.id)
 
     context = {
         "article": article,
         "versions": versions,
         "activities": activities,
         "editions": editions,
+        "user_edition": user_edition,
 
         # Navbar flags
         "can_create_article": (
@@ -425,7 +446,6 @@ def edit_article(request, article_id):
     }
 
     return render(request, "news/edit_article.html", context)
-
 
 
 # -----------------------------------
@@ -483,11 +503,28 @@ def approve_article(request, article_id):
 
     article = Article.objects.get(id=article_id)
 
+    # 🔥 FIX: Put user's edition first
+    user_edition = profile.edition
+
+    if user_edition:
+        editions = [user_edition] + list(
+            Edition.objects.exclude(id=user_edition.id)
+        )
+    else:
+        editions = Edition.objects.all()
+
     if request.method == "POST":
 
         page = request.POST.get("page_number")
+        edition_id = request.POST.get("edition")
 
+        # Assign page
         article.page_number = int(page) if page else None
+
+        # Assign edition
+        if edition_id:
+            article.edition = Edition.objects.get(id=edition_id)
+
         article.status = "editor_approved"
         article.save()
 
@@ -501,6 +538,8 @@ def approve_article(request, article_id):
 
     context = {
         "article": article,
+        "editions": editions,
+        "user_edition": user_edition,   # still useful if needed later
 
         # Navbar role flags
         "can_create_article": (
@@ -518,7 +557,6 @@ def approve_article(request, article_id):
     }
 
     return render(request, "news/approve_article.html", context)
-
 
 # -----------------------------------
 # PAGINATION DASHBOARD
@@ -992,6 +1030,19 @@ def ai_generate_article(request):
         return JsonResponse({"article":article})
 
 
+@login_required
+def ai_generate_topic_article(request):
+
+    if request.method == "POST":
+
+        topic = request.POST.get("topic")
+
+        result = create_article_from_topic(topic)
+
+        return JsonResponse(result)
+
+    return JsonResponse({"error": "POST request required"})
+
 # -----------------------------------
 # POWERFUL NEWSROOM ARCHIVE SEARCH
 # -----------------------------------
@@ -1238,11 +1289,15 @@ def user_control_panel(request):
     })
 
 #------------------
-#CREATE USER
+# CREATE USER
 #------------------
 
-from .forms import CreateUserForm
+from django.contrib.auth.models import User
+from accounts.models import UserProfile, Role
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect
 from .models import Edition
+
 
 @login_required
 def create_user(request):
@@ -1250,47 +1305,62 @@ def create_user(request):
     if not request.user.is_superuser:
         return redirect("/")
 
-    from django.contrib.auth.models import User
-    from accounts.models import UserProfile
-    from .models import Edition
-
     editions = Edition.objects.all()
+    roles = Role.objects.all()
 
     if request.method == "POST":
 
         username = request.POST.get("username")
         email = request.POST.get("email")
         password = request.POST.get("password")
-        role = request.POST.get("role")
+        role_ids = request.POST.getlist("roles")   # MULTI ROLE
         edition_id = request.POST.get("edition")
 
+        # Prevent duplicate username
+        if User.objects.filter(username=username).exists():
+
+            return render(request, "news/create_user.html", {
+                "editions": editions,
+                "roles": roles,
+                "error": "Username already exists"
+            })
+
+        # Create user
         user = User.objects.create_user(
             username=username,
             email=email,
             password=password
         )
 
-        edition = None
+        # Get profile (created automatically by signal)
+        profile = user.userprofile
 
+        # Assign edition
         if edition_id:
-            edition = Edition.objects.get(id=edition_id)
+            profile.edition = Edition.objects.get(id=edition_id)
 
-        UserProfile.objects.create(
-            user=user,
-            role=role,
-            edition=edition,
-            must_change_password=True
-        )
+        profile.must_change_password = True
+        profile.save()
+
+        # Assign MULTIPLE roles
+        if role_ids:
+
+            selected_roles = Role.objects.filter(id__in=role_ids)
+
+            for role in selected_roles:
+                profile.roles.add(role)
 
         return redirect("/user-control/")
 
     return render(request, "news/create_user.html", {
-        "editions": editions
+        "editions": editions,
+        "roles": roles
     })
 
 #--------------
-#EDIT USER
+# EDIT USER
 #--------------
+
 @login_required
 def edit_user(request, user_id):
 
@@ -1298,23 +1368,30 @@ def edit_user(request, user_id):
         return redirect("/")
 
     from django.contrib.auth.models import User
-    from accounts.models import UserProfile
+    from accounts.models import UserProfile, Role
     from .models import Edition
 
     user = User.objects.get(id=user_id)
     profile = user.userprofile
 
     editions = Edition.objects.all()
+    roles = Role.objects.all()
 
     if request.method == "POST":
 
-        role = request.POST.get("role")
+        role_ids = request.POST.getlist("roles")   # MULTI ROLE
         edition_id = request.POST.get("edition")
 
-        profile.role = role
+        # Update roles
+        if role_ids:
+            selected_roles = Role.objects.filter(id__in=role_ids)
+            profile.roles.set(selected_roles)   # replace existing roles
 
+        # Update edition
         if edition_id:
             profile.edition = Edition.objects.get(id=edition_id)
+        else:
+            profile.edition = None
 
         profile.save()
 
@@ -1323,29 +1400,39 @@ def edit_user(request, user_id):
     return render(request, "news/edit_user.html", {
         "user_obj": user,
         "profile": profile,
-        "editions": editions
+        "editions": editions,
+        "roles": roles
     })
 
+
 #---------------------
-#ENABEL/DISABLE USER
+# ENABLE / DISABLE USER
 #---------------------
+from django.shortcuts import redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+
+
 @login_required
 def toggle_user(request, user_id):
 
     if not request.user.is_superuser:
         return redirect("/")
 
-    from django.contrib.auth.models import User
+    user = get_object_or_404(User, id=user_id)
 
-    user = User.objects.get(id=user_id)
+    # Prevent admin disabling himself
+    if user == request.user:
+        return redirect("/user-control/")
 
     user.is_active = not user.is_active
     user.save()
 
     return redirect("/user-control/")
 
+
 #----------------
-#RESET PASSWORD
+# RESET PASSWORD
 #----------------
 @login_required
 def reset_password(request, user_id):
@@ -1353,12 +1440,10 @@ def reset_password(request, user_id):
     if not request.user.is_superuser:
         return redirect("/")
 
-    from django.contrib.auth.models import User
+    user = get_object_or_404(User, id=user_id)
 
-    user = User.objects.get(id=user_id)
-
+    # Default newsroom reset password
     user.set_password("newsroom123")
-
     user.save()
 
     profile = user.userprofile

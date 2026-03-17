@@ -61,6 +61,8 @@ urlpatterns = [
 
     path('login-redirect/', views.login_redirect, name='login_redirect'),
 
+    path("ai-topic-article/", views.ai_generate_topic_article),
+
 #    path('ai-generate-from-urls/', views.ai_generate_article_from_urls, name='ai_generate_article_from_urls'),
 
 ]

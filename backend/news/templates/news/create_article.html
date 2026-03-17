@@ -4,54 +4,102 @@
 
 <h2>Create Article</h2>
 
+<!-- 🔥 NEW: LANGUAGE SWITCH -->
+<div class="mb-2">
+
+<button type="button"
+        class="btn btn-sm btn-primary"
+        onclick="setLanguage('en-IN')">
+English
+</button>
+
+<button type="button"
+        class="btn btn-sm btn-success"
+        onclick="setLanguage('te-IN')">
+తెలుగు
+</button>
+
+</div>
+
 <form method="POST" enctype="multipart/form-data">
 
 {% csrf_token %}
+
+<div class="mb-3">
+
+<label class="form-label"><b>AI Topic Generator (Real News)</b></label>
+
+<input type="text"
+       id="topic_input"
+       class="form-control"
+       placeholder="Enter topic (example: Iran Israel conflict)">
+
+<br>
+
+<button type="button"
+        onclick="aiGenerateTopicArticle()"
+        class="btn btn-dark">
+
+Generate Verified Article
+
+</button>
+
+</div>
 
 
 <div class="mb-3">
 
 <label class="form-label">Title</label>
 
+<div style="display:flex; gap:10px;">
+
 <input type="text"
+       id="title"
        name="title"
        class="form-control"
        required>
 
-</div>
-
-{% comment %}
-<div class="mb-3">
-
-<label class="form-label">Paste News URLs (one per line)</label>
-
-<textarea id="news_urls"
-          rows="4"
-          class="form-control"></textarea>
-
-<br>
-
 <button type="button"
-        onclick="aiGenerateFromUrls()"
-        class="btn btn-dark">
-
-AI Generate From URLs
-
+        onclick="startTitleVoice()"
+        class="btn btn-success">
+🎤 Speak
 </button>
 
 </div>
-{% endcomment %}
+
+</div>
 
 <div class="mb-3">
 
 <label class="form-label">Content</label>
 
-<textarea name="content"
+<textarea id="content"
+          name="content"
           rows="8"
           class="form-control"
           required></textarea>
 
 <br>
+
+<button type="button"
+        onclick="startContentVoice()"
+        class="btn btn-success">
+🎤 Speak Content
+</button>
+
+<button type="button"
+        onclick="stopContentVoice()"
+        class="btn btn-danger">
+⏹ Stop
+</button>
+
+<button type="button"
+        onclick="formatTeluguText()"
+        class="btn btn-primary">
+🧹 Format Content
+</button>
+
+<br><br>
 
 <button type="button" onclick="aiImprove()" class="btn btn-info">
 AI Improve Article
@@ -75,11 +123,7 @@ AI Write Article
 <select name="category" class="form-select">
 
 {% for category in categories %}
-
-<option value="{{ category.id }}">
-{{ category.name }}
-</option>
-
+<option value="{{ category.id }}">{{ category.name }}</option>
 {% endfor %}
 
 </select>
@@ -93,10 +137,7 @@ AI Write Article
 
 <label class="form-label">Select Images</label>
 
-<input type="file"
-       name="images"
-       multiple
-       class="form-control">
+<input type="file" name="images" multiple class="form-control">
 
 </div>
 
@@ -105,159 +146,175 @@ AI Write Article
 
 <label class="form-label">Image Caption</label>
 
-<input type="text"
-       name="caption"
-       class="form-control">
+<input type="text" name="caption" class="form-control">
 
 </div>
 
 
-<button type="submit" class="btn btn-primary">
-Submit Article
-</button>
+<button type="submit" class="btn btn-primary">Submit Article</button>
 
-
-<a href="/reporter-dashboard/" class="btn btn-secondary">
-Cancel
-</a>
+<a href="/reporter-dashboard/" class="btn btn-secondary">Cancel</a>
 
 </form>
 
+
 <script>
 
+// 🔥 NEW GLOBAL LANGUAGE VARIABLE
+let currentLang = "en-IN";
+
+// 🔥 LANGUAGE SWITCH FUNCTION
+function setLanguage(lang) {
+    currentLang = lang;
+
+    if (lang === "te-IN") {
+        alert("Telugu voice enabled");
+    } else {
+        alert("English voice enabled");
+    }
+}
+
+
+// EXISTING FUNCTIONS (UNCHANGED)
+
 function getCookie(name) {
-
 let cookieValue = null;
-
 if (document.cookie && document.cookie !== '') {
-
 const cookies = document.cookie.split(';');
-
 for (let i = 0; i < cookies.length; i++) {
-
 const cookie = cookies[i].trim();
-
 if (cookie.substring(0, name.length + 1) === (name + '=')) {
-
 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
 break;
-
 }
-
 }
-
 }
-
 return cookieValue;
-
 }
 
 
-function aiImprove(){
+// =======================
+// VOICE FUNCTIONS UPDATED
+// =======================
 
-let content = document.querySelector("textarea[name='content']").value;
+function startTitleVoice() {
 
-fetch("/ai-improve-article/", {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert("Voice recognition not supported. Use Chrome.");
+        return;
+    }
 
-method: "POST",
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var recognition = new SpeechRecognition();
 
-headers: {
-"Content-Type": "application/x-www-form-urlencoded",
-"X-CSRFToken": getCookie("csrftoken")
-},
+    recognition.lang = currentLang;  // 🔥 UPDATED
+    recognition.interimResults = false;
 
-body: "content=" + encodeURIComponent(content)
+    recognition.onstart = function(){
+        alert("Listening... Speak now");
+    };
 
-})
-.then(res => res.json())
-.then(data => {
+    recognition.onresult = function(event) {
+        document.getElementById("title").value =
+        event.results[0][0].transcript;
+    };
 
-document.querySelector("textarea[name='content']").value = data.improved_text;
+    recognition.onerror = function(event){
+        alert("Voice error: " + event.error);
+    };
 
-});
-
+    recognition.start();
 }
 
 
-function aiHeadline(){
+let contentRecognition;
+let isListening = false;
+let lastFinalText = "";
 
-let content = document.querySelector("textarea[name='content']").value;
+function startContentVoice() {
 
-fetch("/ai-generate-headline/", {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert("Voice not supported. Use Chrome.");
+        return;
+    }
 
-method: "POST",
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-headers: {
-"Content-Type": "application/x-www-form-urlencoded",
-"X-CSRFToken": getCookie("csrftoken")
-},
+    contentRecognition = new SpeechRecognition();
 
-body: "content=" + encodeURIComponent(content)
+    contentRecognition.lang = currentLang;
+    contentRecognition.continuous = true;
+    contentRecognition.interimResults = false;
 
-})
-.then(res => res.json())
-.then(data => {
+    isListening = true;
 
-document.querySelector("input[name='title']").value = data.headline;
+    contentRecognition.onresult = function(event) {
 
-});
+        let textarea = document.getElementById("content");
 
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+
+            if (event.results[i].isFinal) {
+
+                let newText = event.results[i][0].transcript.trim();
+
+                // 🔥 FORMAT TEXT FIRST
+                let formattedText = newText
+                    .replace(/ full stop| పూర్తి విరామం/gi, ".")
+                    .replace(/ comma| కామా/gi, ",")
+                    .replace(/ new line| కొత్త లైన్/gi, "\n");
+
+                // 🔥 PREVENT DUPLICATE USING FORMATTED TEXT
+                if (formattedText !== lastFinalText) {
+
+                    textarea.value += formattedText + " ";
+                    lastFinalText = formattedText;
+                }
+            }
+        }
+    };
+
+    contentRecognition.onerror = function(event){
+        console.log("Error:", event.error);
+    };
+
+    contentRecognition.onend = function() {
+        if (isListening) {
+            contentRecognition.start();
+        }
+    };
+
+    contentRecognition.start();
 }
 
+function stopContentVoice() {
 
-function aiWriteArticle(){
+    isListening = false;
 
-let notes = document.querySelector("textarea[name='content']").value;
-
-fetch("/ai-generate-article/", {
-
-method: "POST",
-
-headers: {
-"Content-Type": "application/x-www-form-urlencoded",
-"X-CSRFToken": getCookie("csrftoken")
-},
-
-body: "notes=" + encodeURIComponent(notes)
-
-})
-.then(res => res.json())
-.then(data => {
-
-document.querySelector("textarea[name='content']").value = data.article;
-
-});
-
+    if (contentRecognition) {
+        contentRecognition.onend = null;
+        contentRecognition.stop();
+    }
 }
 
-/*
+function formatTeluguText() {
 
-function aiGenerateFromUrls(){
+    let textarea = document.getElementById("content");
+    let text = textarea.value;
 
-let urls = document.getElementById("news_urls").value;
+    // 🔥 Step 1: Normalize spaces
+    text = text.replace(/\s+/g, " ").trim();
 
-fetch("/ai-generate-from-urls/", {
+    // 🔥 Step 2: Add line break after long sentences (safe split)
+    text = text.replace(/(.{80,120})\s/g, "$1\n");
 
-method: "POST",
+    // 🔥 Step 3: Fix spacing around punctuation
+    text = text.replace(/\s+\./g, ".");
+    text = text.replace(/\.\s*/g, ".\n");
 
-headers: {
-"Content-Type": "application/x-www-form-urlencoded",
-"X-CSRFToken": getCookie("csrftoken")
-},
-
-body: "urls=" + encodeURIComponent(urls)
-
-})
-.then(res => res.json())
-.then(data => {
-
-document.querySelector("textarea[name='content']").value = data.article;
-
-});
-
+    textarea.value = text.trim();
 }
 
-*/
 </script>
 
 {% endblock %}

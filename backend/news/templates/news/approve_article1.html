@@ -31,21 +31,6 @@ Caption: {{ image.caption }}
 
 {% csrf_token %}
 
-<label>Select Edition</label><br>
-
-<select name="edition">
-
-{% for ed in editions %}
-<option value="{{ ed.id }}"
-{% if user_edition and ed.id|stringformat:"s" == user_edition.id|stringformat:"s" %}selected{% endif %}>
-{{ ed.name }}
-</option>
-{% endfor %}
-
-</select>
-
-<br><br>
-
 <label>Assign Page Number</label><br>
 
 <input type="number" name="page_number"><br><br>
@@ -53,19 +38,6 @@ Caption: {{ image.caption }}
 <button type="submit">Approve Article</button>
 
 </form>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-
-    var userEditionId = "{{ user_edition.id }}";
-    var dropdown = document.getElementById("edition_select");
-
-    if (dropdown && userEditionId) {
-        dropdown.value = userEditionId;
-    }
-
-});
-</script>
 
 </body>
 

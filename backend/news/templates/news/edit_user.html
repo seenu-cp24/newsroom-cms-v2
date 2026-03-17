@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container mt-4">
+
+<h2>Edit User</h2>
+
+<hr>
+
+<form method="POST">
+
+{% csrf_token %}
+
+<div class="mb-3">
+
+<label class="form-label">Username</label>
+
+<input type="text"
+       class="form-control"
+       value="{{ user_obj.username }}"
+       disabled>
+
+</div>
+
+
+<div class="mb-3">
+
+<label class="form-label">Email</label>
+
+<input type="email"
+       class="form-control"
+       value="{{ user_obj.email }}"
+       disabled>
+
+</div>
+
+
+<!-- ROLES -->
+
+<div class="mb-3">
+
+<label class="form-label">Roles</label>
+
+<select name="roles" class="form-select" multiple>
+
+{% for role in roles %}
+
+<option value="{{ role.id }}"
+{% if role in profile.roles.all %}
+selected
+{% endif %}
+>
+
+{{ role.name }}
+
+</option>
+
+{% endfor %}
+
+</select>
+
+<small class="text-muted">
+Hold CTRL (Windows) or CMD (Mac) to select multiple roles
+</small>
+
+</div>
+
+
+<!-- EDITION -->
+
+<div class="mb-3">
+
+<label class="form-label">Edition</label>
+
+<select name="edition" class="form-select">
+
+<option value="">-- Select Edition --</option>
+
+{% for ed in editions %}
+
+<option value="{{ ed.id }}"
+{% if profile.edition and profile.edition.id == ed.id %}
+selected
+{% endif %}
+>
+
+{{ ed.name }}
+
+</option>
+
+{% endfor %}
+
+</select>
+
+</div>
+
+
+<!-- BUTTONS -->
+
+<div class="mt-4">
+
+<button type="submit" class="btn btn-success">
+Update User
+</button>
+
+<a href="/user-control/" class="btn btn-secondary">
+Cancel
+</a>
+
+</div>
+
+</form>
+
+</div>
+
+{% endblock %}

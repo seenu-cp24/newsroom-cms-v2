@@ -15,7 +15,7 @@ SECRET_KEY = 'django-insecure-newsroom-development-key'
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['13.234.146.97', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['andhraprabha.net', 'www.andhraprabha.net', '13.234.146.97', 'localhost', '127.0.0.1']
 
 
 # APPLICATIONS

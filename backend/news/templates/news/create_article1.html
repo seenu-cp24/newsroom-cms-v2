@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h2>Create Article</h2>
+
+<form method="POST" enctype="multipart/form-data">
+
+{% csrf_token %}
+
+<div class="mb-3">
+
+<label class="form-label"><b>AI Topic Generator (Real News)</b></label>
+
+<input type="text"
+       id="topic_input"
+       class="form-control"
+       placeholder="Enter topic (example: Iran Israel conflict)">
+
+<br>
+
+<button type="button"
+        onclick="aiGenerateTopicArticle()"
+        class="btn btn-dark">
+
+Generate Verified Article
+
+</button>
+
+</div>
+
+
+<div class="mb-3">
+
+<label class="form-label">Title</label>
+
+<div style="display:flex; gap:10px;">
+
+<input type="text"
+       id="title"
+       name="title"
+       class="form-control"
+       required>
+
+<button type="button"
+        onclick="startTitleVoice()"
+        class="btn btn-success">
+🎤 Speak
+</button>
+
+</div>
+
+</div>
+
+<div class="mb-3">
+
+<label class="form-label">Content</label>
+
+<textarea id="content"
+          name="content"
+          rows="8"
+          class="form-control"
+          required></textarea>
+
+<br>
+
+<button type="button"
+        onclick="startContentVoice()"
+        class="btn btn-success">
+🎤 Speak Content
+</button>
+
+<br>
+<br>
+
+<button type="button" onclick="aiImprove()" class="btn btn-info">
+AI Improve Article
+</button>
+
+<button type="button" onclick="aiHeadline()" class="btn btn-warning">
+Generate Headline
+</button>
+
+<button type="button" onclick="aiWriteArticle()" class="btn btn-secondary">
+AI Write Article
+</button>
+
+</div>
+
+
+<div class="mb-3">
+
+<label class="form-label">Category</label>
+
+<select name="category" class="form-select">
+
+{% for category in categories %}
+
+<option value="{{ category.id }}">
+{{ category.name }}
+</option>
+
+{% endfor %}
+
+</select>
+
+</div>
+
+
+<h4 class="mt-4">Upload Images</h4>
+
+<div class="mb-3">
+
+<label class="form-label">Select Images</label>
+
+<input type="file"
+       name="images"
+       multiple
+       class="form-control">
+
+</div>
+
+
+<div class="mb-3">
+
+<label class="form-label">Image Caption</label>
+
+<input type="text"
+       name="caption"
+       class="form-control">
+
+</div>
+
+
+<button type="submit" class="btn btn-primary">
+Submit Article
+</button>
+
+
+<a href="/reporter-dashboard/" class="btn btn-secondary">
+Cancel
+</a>
+
+</form>
+
+
+<script>
+
+function getCookie(name) {
+
+let cookieValue = null;
+
+if (document.cookie && document.cookie !== '') {
+
+const cookies = document.cookie.split(';');
+
+for (let i = 0; i < cookies.length; i++) {
+
+const cookie = cookies[i].trim();
+
+if (cookie.substring(0, name.length + 1) === (name + '=')) {
+
+cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+
+break;
+
+}
+
+}
+
+}
+
+return cookieValue;
+
+}
+
+
+function aiImprove(){
+
+let content = document.querySelector("textarea[name='content']").value;
+
+fetch("/ai-improve-article/", {
+
+method: "POST",
+
+headers: {
+
+"Content-Type": "application/x-www-form-urlencoded",
+
+"X-CSRFToken": getCookie("csrftoken")
+
+},
+
+body: "content=" + encodeURIComponent(content)
+
+})
+
+.then(res => res.json())
+
+.then(data => {
+
+document.querySelector("textarea[name='content']").value = data.improved_text;
+
+});
+
+}
+
+
+function aiHeadline(){
+
+let content = document.querySelector("textarea[name='content']").value;
+
+fetch("/ai-generate-headline/", {
+
+method: "POST",
+
+headers: {
+
+"Content-Type": "application/x-www-form-urlencoded",
+
+"X-CSRFToken": getCookie("csrftoken")
+
+},
+
+body: "content=" + encodeURIComponent(content)
+
+})
+
+.then(res => res.json())
+
+.then(data => {
+
+document.querySelector("input[name='title']").value = data.headline;
+
+});
+
+}
+
+
+function aiWriteArticle(){
+
+let notes = document.querySelector("textarea[name='content']").value;
+
+fetch("/ai-generate-article/", {
+
+method: "POST",
+
+headers: {
+
+"Content-Type": "application/x-www-form-urlencoded",
+
+"X-CSRFToken": getCookie("csrftoken")
+
+},
+
+body: "notes=" + encodeURIComponent(notes)
+
+})
+
+.then(res => res.json())
+
+.then(data => {
+
+document.querySelector("textarea[name='content']").value = data.article;
+
+});
+
+}
+
+
+function aiGenerateTopicArticle(){
+
+let topic = document.getElementById("topic_input").value;
+
+if(!topic){
+
+alert("Please enter a topic");
+
+return;
+
+}
+
+fetch("/ai-topic-article/", {
+
+method: "POST",
+
+headers: {
+
+"Content-Type": "application/x-www-form-urlencoded",
+
+"X-CSRFToken": getCookie("csrftoken")
+
+},
+
+body: "topic=" + encodeURIComponent(topic)
+
+})
+
+.then(res => res.json())
+
+.then(data => {
+
+if(data.headline){
+
+document.querySelector("input[name='title']").value = data.headline;
+
+}
+
+if(data.article){
+
+document.querySelector("textarea[name='content']").value = data.article;
+
+}
+
+});
+
+}
+
+</script>
+
+<script>
+
+function startTitleVoice() {
+
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert("Voice recognition not supported in this browser. Please use Chrome.");
+        return;
+    }
+
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var recognition = new SpeechRecognition();
+
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = function(){
+        alert("Listening... Speak now");
+    };
+
+    recognition.onresult = function(event) {
+
+        document.getElementById("title").value =
+        event.results[0][0].transcript;
+
+    };
+
+    recognition.onerror = function(event){
+        alert("Voice error: " + event.error);
+    };
+
+    recognition.start();
+
+}
+
+
+
+let recognition;
+let isListening = false;
+
+function startContentVoice() {
+
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert("Voice recognition not supported in this browser. Please use Chrome.");
+        return;
+    }
+
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var recognition = new SpeechRecognition();
+
+    recognition.lang = "en-IN";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = function(){
+        alert("Listening... Speak content");
+    };
+
+    recognition.onresult = function(event) {
+
+        let transcript = event.results[0][0].transcript;
+
+        let textarea = document.getElementById("content");
+
+        textarea.value += transcript + " ";
+
+    };
+
+    recognition.onerror = function(event){
+        alert("Voice error: " + event.error);
+    };
+
+    recognition.start();
+
+}
+
+function stopVoice() {
+
+    if (recognition) {
+        recognition.stop();
+        isListening = false;
+        alert("Voice dictation stopped.");
+    }
+
+}
+
+</script>
+{% endblock %}
